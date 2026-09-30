@@ -51,7 +51,7 @@
 <body>
 <div class="wrap">
   <h1>Filters and Belts Lookup</h1>
-  <p class="sub">Pick a property and a month. Filters show in the property's service months (every 3 months for quarterly, every 6 for bi-annual, 8 visits a year for 6x). Belts show only in its belt month.</p>
+  <p class="sub" id="subText">Pick a property and a month. Filters show in the property's service months (every 3 months for quarterly, every 6 for bi-annual, 8 visits a year for 6x). Belts show only in its belt month.</p>
 
   <div class="card noprint" id="loadCard">
     <details id="loadDetails">
@@ -336,6 +336,7 @@
   // Once data is loaded, hide the whole load section and leave only a small "Reload" link
   function setLoaded(on){
     $('loadCard').style.display=on?'none':'';
+    $('subText').style.display=on?'none':'';
     $('reloadRow').style.display=on?'':'none';
   }
   $('reloadLink').onclick=function(e){e.preventDefault();setLoaded(false);$('loadDetails').open=true;};
