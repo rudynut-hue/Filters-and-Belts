@@ -1,0 +1,386 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Filters and Belts Lookup</title>
+<style>
+  :root{--bg:#f6f7f9;--card:#fff;--ink:#1d2430;--mute:#647084;--line:#dde2ea;--accent:#1f6feb;--ok:#137a3f;--okbg:#e5f6ec;--warn:#8a5a00;--warnbg:#fff3d6}
+  *{box-sizing:border-box}
+  body{margin:0;font:16px/1.45 system-ui,Segoe UI,Arial,sans-serif;background:var(--bg);color:var(--ink)}
+  .wrap{max-width:900px;margin:0 auto;padding:20px 16px 60px}
+  h1{font-size:22px;margin:0 0 4px}
+  .sub{color:var(--mute);margin:0 0 18px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px;margin-bottom:16px}
+  label{display:block;font-size:13px;font-weight:600;color:var(--mute);margin:0 0 4px}
+  select,input[type=text]{width:100%;font:inherit;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--ink)}
+  input[type=file]{font:inherit}
+  .row{display:flex;gap:12px;flex-wrap:wrap}
+  .row>div{flex:1 1 200px}
+  .picker{position:relative}
+  .list{position:absolute;left:0;right:0;top:100%;z-index:10;background:#fff;border:1px solid var(--line);border-radius:8px;margin-top:4px;max-height:320px;overflow:auto;box-shadow:0 8px 24px rgba(0,0,0,.12);display:none}
+  .list div{padding:9px 12px;cursor:pointer}
+  .list div.act,.list div:hover{background:#eaf1ff}
+  .list .none{color:var(--mute);cursor:default}
+  .chips{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0 12px}
+  .chip{background:#eef1f6;border-radius:999px;padding:3px 11px;font-size:13px}
+  .banner{border-radius:8px;padding:10px 12px;margin:10px 0;font-weight:600}
+  .banner.ok{background:var(--okbg);color:var(--ok)}
+  .banner.no{background:var(--warnbg);color:var(--warn)}
+  table{border-collapse:collapse;width:100%;margin:6px 0 14px}
+  th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line)}
+  th{font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--mute)}
+  h2{font-size:16px;margin:14px 0 2px}
+  .muted{color:var(--mute);font-size:14px}
+  button{font:inherit;padding:8px 14px;border-radius:8px;border:1px solid var(--line);background:#fff;cursor:pointer}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  details summary{cursor:pointer;font-weight:600}
+  .cols label{display:inline-flex;align-items:center;gap:6px;font-weight:400;color:var(--ink);margin:4px 14px 4px 0;font-size:14px}
+  .hide{display:none}
+  .tog{display:flex;align-items:center;gap:8px;margin-top:10px;font-weight:400;color:var(--ink);font-size:14px}
+  @media print{.noprint{display:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Filters and Belts Lookup</h1>
+  <p class="sub">Pick a property and a month. Filters show in the property's service months (every 3 months for quarterly, every 6 for bi-annual). Belts show only in its belt month.</p>
+
+  <div class="card noprint" id="loadCard">
+    <details id="loadDetails">
+      <summary id="loadSummary">1. Load your data</summary>
+      <p class="muted">Export <b>tblProperties</b> and <b>tblParts</b> to text/CSV files (in Access: right-click the table, Export, Text File, delimited, include field names), then pick them here. The data stays in this browser and is never sent anywhere.</p>
+      <div class="row">
+        <div><label>Properties file</label><input type="file" id="fProps" accept=".csv,.txt,.tsv"></div>
+        <div><label>Parts file</label><input type="file" id="fParts" accept=".csv,.txt,.tsv"></div>
+      </div>
+      <p><button class="primary" id="btnLoad">Load files</button>
+         <button id="btnClear">Clear saved data</button>
+         <span class="muted" id="loadMsg"></span></p>
+
+      <details id="mapDetails">
+        <summary>Column settings (auto-filled, change only if something looks wrong)</summary>
+        <div class="row" style="margin-top:10px">
+          <div><label>Properties: ID column</label><select id="mPId"></select></div>
+          <div><label>Properties: name column</label><select id="mPName"></select></div>
+          <div><label>Properties: renewal month column</label><select id="mPRen"></select></div>
+          <div><label>Properties: billing frequency column</label><select id="mPFreq"></select></div>
+        </div>
+        <div class="row" style="margin-top:10px">
+          <div><label>Parts: property ID column</label><select id="mTId"></select></div>
+          <div><label>Parts: column that says Filter or Belt</label><select id="mType"></select></div>
+          <div><label>Word that marks a belt row</label><input type="text" id="mBelt" value="belt"></div>
+        </div>
+        <label style="margin-top:12px">Parts: columns to show</label>
+        <div class="cols" id="mCols"></div>
+        <p><button id="btnApply">Apply</button></p>
+      </details>
+    </details>
+  </div>
+
+  <p class="muted noprint" id="reloadRow" style="display:none;margin:-6px 0 14px"><a href="#" id="reloadLink">Reload or change data</a></p>
+
+  <div class="card" id="mainCard">
+    <div class="row">
+      <div class="picker">
+        <label for="q">Property (type to search, or click to see the full list)</label>
+        <input type="text" id="q" autocomplete="off" placeholder="Start typing a property name">
+        <div class="list" id="list"></div>
+      </div>
+      <div style="max-width:200px">
+        <label for="mon">Month</label>
+        <select id="mon"></select>
+      </div>
+    </div>
+    <label class="tog noprint"><input type="checkbox" id="anyway"> Show all parts regardless of month</label>
+    <div id="out"></div>
+  </div>
+</div>
+
+<script>
+(function(){
+  var MONTHS=['January','February','March','April','May','June','July','August','September','October','November','December'];
+  var KEY='fbLookupV2';
+  var S={props:null,parts:null,map:{},sel:null};
+
+  function $(id){return document.getElementById(id)}
+  function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
+
+  /* ---------- CSV parsing ---------- */
+  function parseCSV(text){
+    if(text.charCodeAt(0)===0xFEFF) text=text.slice(1);
+    var firstLine=text.split(/\r?\n/,1)[0]||'';
+    var delim=',';
+    var counts={',':0,'\t':0,';':0};
+    var inq=false;
+    for(var i=0;i<firstLine.length;i++){var c=firstLine[i]; if(c==='"')inq=!inq; else if(!inq&&counts[c]!==undefined)counts[c]++;}
+    if(counts['\t']>counts[delim])delim='\t';
+    if(counts[';']>counts[delim])delim=';';
+    var rows=[],row=[],cur='',q=false;
+    for(var j=0;j<text.length;j++){
+      var ch=text[j];
+      if(q){
+        if(ch==='"'){ if(text[j+1]==='"'){cur+='"';j++;} else q=false; }
+        else cur+=ch;
+      }else{
+        if(ch==='"')q=true;
+        else if(ch===delim){row.push(cur);cur='';}
+        else if(ch==='\n'){row.push(cur);rows.push(row);row=[];cur='';}
+        else if(ch==='\r'){}
+        else cur+=ch;
+      }
+    }
+    if(cur.length||row.length){row.push(cur);rows.push(row);}
+    rows=rows.filter(function(r){return r.some(function(v){return v.trim()!==''})});
+    if(!rows.length)return {headers:[],rows:[]};
+    var headers=rows[0].map(function(h){return h.trim()});
+    var data=rows.slice(1).map(function(r){
+      var o={};headers.forEach(function(h,i){o[h]=(r[i]==null?'':r[i]).trim()});return o;
+    });
+    return {headers:headers,rows:data};
+  }
+
+  /* ---------- belt logic (same as GetBeltMonth in modBeltLogic) ---------- */
+  function parseMonth(v){
+    v=String(v==null?'':v).trim(); if(!v)return 0;
+    if(/^\d{1,2}$/.test(v)){var n=parseInt(v,10);return(n>=1&&n<=12)?n:0;}
+    var k=v.slice(0,3).toLowerCase();
+    for(var i=0;i<12;i++){if(MONTHS[i].slice(0,3).toLowerCase()===k&&/^[a-z]/i.test(v))return i+1;}
+    var d=new Date(v); if(!isNaN(d)&&/[\/\-]/.test(v))return d.getMonth()+1;
+    return 0;
+  }
+  function freqKind(f){
+    f=String(f||'').toLowerCase();
+    if(/quarter/.test(f))return 'quarterly';
+    if(/(bi|semi)[\s\-]?annual/.test(f))return 'biannual';
+    return 'other';
+  }
+  function beltMonth(renewal,freq){
+    var m=renewal; if(!m)return 0;
+    var k=freqKind(freq);
+    if(k==='quarterly')return 3+(m%3);          // 1->4, 2->5, 3->3 ... (Mar/Apr/May)
+    if(k==='biannual')return m<=6?m:m-6;
+    return m;
+  }
+  // Months with a service visit (filter change): quarterly = every 3 months, bi-annual = every 6, otherwise once a year
+  function serviceMonths(renewal,freq){
+    if(!renewal)return [];
+    var k=freqKind(freq), step=(k==='quarterly')?3:(k==='biannual')?6:12, out=[];
+    for(var x=0;x<12;x+=step){out.push(((renewal-1+x)%12)+1);}
+    return out.sort(function(a,b){return a-b});
+  }
+  function nextService(list,mon){
+    for(var i=0;i<list.length;i++){if(list[i]>mon)return list[i];}
+    return list[0];
+  }
+
+  /* ---------- column auto-detect ---------- */
+  function pick(headers,regs){
+    for(var r=0;r<regs.length;r++){
+      for(var i=0;i<headers.length;i++){ if(regs[r].test(headers[i]))return headers[i]; }
+    }
+    return '';
+  }
+  function fillSelect(sel,headers,val){
+    sel.innerHTML='<option value="">(none)</option>'+headers.map(function(h){return '<option'+(h===val?' selected':'')+'>'+esc(h)+'</option>'}).join('');
+  }
+  function autodetect(){
+    var ph=S.props.headers, th=S.parts.headers;
+    var m=S.map;
+    m.pId=m.pId||pick(ph,[/^propertyid$/i,/property.?id/i,/^id$/i]);
+    m.pName=m.pName||pick(ph,[/^propertyname$/i,/property.?name/i,/^name$/i]);
+    m.pRen=m.pRen||pick(ph,[/^renewalmonth$/i,/renewal/i]);
+    m.pFreq=m.pFreq||pick(ph,[/^billingfrequency$/i,/billing.?freq/i,/freq/i]);
+    m.tId=m.tId||pick(th,[/^propertyid$/i,/property.?id/i]);
+    m.tType=m.tType||pick(th,[/^parttype$/i,/type/i]);
+    if(!m.cols){
+      m.cols=th.filter(function(h){return h!==m.tType && !/(^id$|property.?id|partid|^partsid)/i.test(h)});
+    }
+    if(m.belt==null)m.belt='belt';
+  }
+  function renderMapping(){
+    var m=S.map;
+    fillSelect($('mPId'),S.props.headers,m.pId);
+    fillSelect($('mPName'),S.props.headers,m.pName);
+    fillSelect($('mPRen'),S.props.headers,m.pRen);
+    fillSelect($('mPFreq'),S.props.headers,m.pFreq);
+    fillSelect($('mTId'),S.parts.headers,m.tId);
+    fillSelect($('mType'),S.parts.headers,m.tType);
+    $('mBelt').value=m.belt;
+    $('mCols').innerHTML=S.parts.headers.map(function(h,i){
+      var on=m.cols.indexOf(h)>-1;
+      return '<label><input type="checkbox" data-c="'+i+'"'+(on?' checked':'')+'> '+esc(h)+'</label>';
+    }).join('');
+  }
+  function readMapping(){
+    var m=S.map;
+    m.pId=$('mPId').value; m.pName=$('mPName').value; m.pRen=$('mPRen').value; m.pFreq=$('mPFreq').value;
+    m.tId=$('mTId').value; m.tType=$('mType').value; m.belt=$('mBelt').value;
+    var cols=[];
+    $('mCols').querySelectorAll('input').forEach(function(cb){ if(cb.checked)cols.push(S.parts.headers[+cb.getAttribute('data-c')]); });
+    m.cols=cols;
+  }
+
+  /* ---------- property list ---------- */
+  function propList(){
+    var m=S.map, out=[];
+    (S.props?S.props.rows:[]).forEach(function(r){
+      var name=(r[m.pName]||'').trim(); if(!name)return;
+      out.push({id:String(r[m.pId]||'').trim(),name:name,renewal:parseMonth(r[m.pRen]),renewalRaw:r[m.pRen],freq:r[m.pFreq]||''});
+    });
+    out.sort(function(a,b){return a.name.localeCompare(b.name,undefined,{sensitivity:'base'})});
+    return out;
+  }
+  var PL=[];
+
+  /* ---------- picker ---------- */
+  var act=-1, shown=[];
+  var showAll=false;
+  function showList(){
+    var t=showAll?'':$('q').value.trim().toLowerCase();
+    var starts=[],has=[];
+    PL.forEach(function(p){
+      var n=p.name.toLowerCase();
+      if(!t){starts.push(p);return;}
+      if(n.indexOf(t)===0)starts.push(p); else if(n.indexOf(t)>-1)has.push(p);
+    });
+    shown=starts.concat(has);
+    var l=$('list');
+    if(!PL.length){l.innerHTML='<div class="none">Load your files first</div>';}
+    else if(!shown.length){l.innerHTML='<div class="none">No matching property</div>';}
+    else l.innerHTML=shown.map(function(p,i){return '<div data-i="'+i+'" class="'+(i===act?'act':'')+'">'+esc(p.name)+'</div>'}).join('');
+    l.style.display='block';
+  }
+  function hideList(){$('list').style.display='none';act=-1;}
+  function choose(p){S.sel=p;$('q').value=p.name;hideList();render();}
+
+  /* ---------- results ---------- */
+  function render(){
+    var out=$('out'), p=S.sel;
+    if(!p){out.innerHTML='';return;}
+    var m=S.map, mon=parseInt($('mon').value,10);
+    var bm=beltMonth(p.renewal,p.freq);
+    var sm=serviceMonths(p.renewal,p.freq);
+    var serviceNow=sm.indexOf(mon)>-1;
+    var dueNow=bm>0&&bm===mon;
+    var any=$('anyway').checked;
+    var rows=S.parts.rows.filter(function(r){return String(r[m.tId]||'').trim()===p.id});
+    var kw=(m.belt||'belt').toLowerCase();
+    var filters=[],belts=[];
+    rows.forEach(function(r){
+      var text=(m.tType?(r[m.tType]||''):m.cols.map(function(c){return r[c]||''}).join(' ')).toLowerCase();
+      (text.indexOf(kw)>-1?belts:filters).push(r);
+    });
+    var sortCol=pick(m.cols,[/size/i])||m.cols[0];
+    function byCol(a,b){return String(a[sortCol]||'').localeCompare(String(b[sortCol]||''),undefined,{numeric:true,sensitivity:'base'})}
+    filters.sort(byCol); belts.sort(byCol);
+    function tbl(list){
+      if(!list.length)return '<p class="muted">None on file.</p>';
+      return '<table><thead><tr>'+m.cols.map(function(c){return '<th>'+esc(c)+'</th>'}).join('')+'</tr></thead><tbody>'+
+        list.map(function(r){return '<tr>'+m.cols.map(function(c){return '<td>'+esc(r[c])+'</td>'}).join('')+'</tr>'}).join('')+'</tbody></table>';
+    }
+    var h='';
+    h+='<div class="chips"><span class="chip">Renewal: '+(p.renewal?MONTHS[p.renewal-1]:esc(p.renewalRaw||'unknown'))+'</span>'+
+       '<span class="chip">Billing: '+esc(p.freq||'unknown')+'</span>'+
+       '<span class="chip">Service months: '+(sm.length?sm.map(function(x){return MONTHS[x-1].slice(0,3)}).join(', '):'unknown')+'</span>'+
+       '<span class="chip">Belt month: '+(bm?MONTHS[bm-1]:'unknown')+'</span></div>';
+    if(!p.renewal) h+='<div class="banner no">Renewal month could not be read for this property, so the schedule is unknown.</div>';
+    else if(serviceNow&&dueNow) h+='<div class="banner ok">Service visit in '+MONTHS[mon-1]+': filters and belts are due.</div>';
+    else if(serviceNow) h+='<div class="banner ok">Service visit in '+MONTHS[mon-1]+': filters are due. No belts this visit (next belts: '+MONTHS[bm-1]+').</div>';
+    else h+='<div class="banner no">No service visit in '+MONTHS[mon-1]+'. Next visit: '+MONTHS[nextService(sm,mon)-1]+'.</div>';
+    if(serviceNow||any){
+      h+='<h2>Filters'+(!serviceNow?' <span class="muted">(no visit this month)</span>':'')+'</h2>'+tbl(filters);
+    }else if(filters.length){
+      h+='<p class="muted">'+filters.length+' filter line'+(filters.length>1?'s':'')+' on file, hidden because there is no service visit this month.</p>';
+    }
+    if((serviceNow&&dueNow)||any){
+      h+='<h2>Belts'+(!dueNow?' <span class="muted">(not due this month)</span>':'')+'</h2>'+tbl(belts);
+    }else if(belts.length){
+      h+='<p class="muted">'+belts.length+' belt line'+(belts.length>1?'s':'')+' on file, hidden because belts are not due this month.</p>';
+    }
+    if(!rows.length)h+='<p class="muted">No parts rows matched this property ID ('+esc(p.id)+'). Check the column settings.</p>';
+    out.innerHTML=h;
+  }
+
+  /* ---------- load / save ---------- */
+  function save(pt,tt){ try{localStorage.setItem(KEY,JSON.stringify({p:pt,t:tt,map:S.map}));}catch(e){} }
+  function ingest(pt,tt,keepMap){
+    S.props=parseCSV(pt); S.parts=parseCSV(tt);
+    if(!keepMap)S.map={};
+    autodetect(); renderMapping();
+    PL=propList(); S.sel=null; $('q').value=''; $('out').innerHTML='';
+    var need=!(S.map.pId&&S.map.pName&&S.map.pRen&&S.map.tId&&S.map.tType);
+    $('mapDetails').open=need;
+    $('loadSummary').textContent='1. Load your data ('+PL.length+' properties, '+S.parts.rows.length+' parts rows loaded)';
+    $('loadDetails').open=need||!PL.length;
+    return need;
+  }
+  function readFile(f){return new Promise(function(res,rej){var r=new FileReader();r.onload=function(){res(r.result)};r.onerror=rej;r.readAsText(f);});}
+  // Once data is loaded, hide the whole load section and leave only a small "Reload" link
+  function setLoaded(on){
+    $('loadCard').style.display=on?'none':'';
+    $('reloadRow').style.display=on?'':'none';
+  }
+  $('reloadLink').onclick=function(e){e.preventDefault();setLoaded(false);$('loadDetails').open=true;};
+
+  $('btnLoad').onclick=function(){
+    var a=$('fProps').files[0], b=$('fParts').files[0];
+    if(!a||!b){$('loadMsg').textContent='Pick both files.';return;}
+    Promise.all([readFile(a),readFile(b)]).then(function(v){
+      var need=ingest(v[0],v[1],false);
+      save(v[0],v[1]);
+      $('loadMsg').textContent=need?'Loaded. Please check the column settings.':'Loaded and saved in this browser.';
+      if(!need&&PL.length)setLoaded(true);
+    });
+  };
+  $('btnApply').onclick=function(){
+    readMapping(); PL=propList(); S.sel=null; $('out').innerHTML=''; $('q').value='';
+    try{var d=JSON.parse(localStorage.getItem(KEY)||'null'); if(d){d.map=S.map;localStorage.setItem(KEY,JSON.stringify(d));}}catch(e){}
+    $('loadSummary').textContent='1. Load your data ('+PL.length+' properties, '+S.parts.rows.length+' parts rows loaded)';
+    $('loadMsg').textContent='Settings applied.';
+    if(PL.length)setLoaded(true);
+  };
+  $('btnClear').onclick=function(){
+    try{localStorage.removeItem(KEY);}catch(e){}
+    S={props:null,parts:null,map:{},sel:null}; PL=[]; $('out').innerHTML=''; $('q').value='';
+    $('loadSummary').textContent='1. Load your data'; $('loadMsg').textContent='Saved data cleared.';
+    $('loadDetails').open=true;
+  };
+
+  /* ---------- events ---------- */
+  var mon=$('mon');
+  mon.innerHTML=MONTHS.map(function(n,i){return '<option value="'+(i+1)+'">'+n+'</option>'}).join('');
+  mon.value=String(new Date().getMonth()+1);
+  mon.onchange=render;
+  $('anyway').onchange=render;
+
+  var q=$('q');
+  q.addEventListener('focus',function(){act=-1;showAll=!!S.sel;showList();if(S.sel&&q.select)q.select();});
+  q.addEventListener('input',function(){act=-1;showAll=false;S.sel=null;$('out').innerHTML='';showList();});
+  q.addEventListener('keydown',function(e){
+    if($('list').style.display!=='block'&&(e.key==='ArrowDown')){showList();return;}
+    if(e.key==='ArrowDown'){act=Math.min(act+1,shown.length-1);showList();scrollAct();e.preventDefault();}
+    else if(e.key==='ArrowUp'){act=Math.max(act-1,0);showList();scrollAct();e.preventDefault();}
+    else if(e.key==='Enter'){ if(act<0&&shown.length)act=0; if(shown[act])choose(shown[act]); e.preventDefault(); }
+    else if(e.key==='Escape'){hideList();}
+  });
+  function scrollAct(){var el=$('list').querySelector('.act'); if(el)el.scrollIntoView({block:'nearest'});}
+  $('list').addEventListener('mousedown',function(e){
+    var d=e.target.closest('div[data-i]'); if(d){e.preventDefault();choose(shown[+d.getAttribute('data-i')]);}
+  });
+  document.addEventListener('click',function(e){ if(!e.target.closest('.picker'))hideList(); });
+
+  /* ---------- restore ---------- */
+  try{
+    var saved=JSON.parse(localStorage.getItem(KEY)||'null');
+    if(saved&&saved.p&&saved.t){
+      S.map=saved.map||{};
+      var need0=ingest(saved.p,saved.t,true);
+      $('loadMsg').textContent='';
+      if(!need0&&PL.length)setLoaded(true);
+    }else{$('loadDetails').open=true;}
+  }catch(e){$('loadDetails').open=true;}
+})();
+</script>
+</body>
+</html>
