@@ -44,7 +44,7 @@
 <body>
 <div class="wrap">
   <h1>Filters and Belts Lookup</h1>
-  <p class="sub">Pick a property and a month. Filters show in the property's service months (every 3 months for quarterly, every 6 for bi-annual). Belts show only in its belt month.</p>
+  <p class="sub">Pick a property and a month. Filters show in the property's service months (every 3 months for quarterly, every 6 for bi-annual, 8 visits a year for 6x). Belts show only in its belt month.</p>
 
   <div class="card noprint" id="loadCard">
     <details id="loadDetails">
@@ -65,6 +65,7 @@
           <div><label>Properties: name column</label><select id="mPName"></select></div>
           <div><label>Properties: renewal month column</label><select id="mPRen"></select></div>
           <div><label>Properties: billing frequency column</label><select id="mPFreq"></select></div>
+          <div><label>Properties: 6x filters column (optional)</label><select id="mP6x"></select></div>
         </div>
         <div class="row" style="margin-top:10px">
           <div><label>Parts: property ID column</label><select id="mTId"></select></div>
@@ -149,6 +150,7 @@
     var d=new Date(v); if(!isNaN(d)&&/[\/\-]/.test(v))return d.getMonth()+1;
     return 0;
   }
+  function isTrue(v){return /^(-1|1|yes|true|y|x|on)$/i.test(String(v==null?'':v).trim());}
   function freqKind(f){
     f=String(f||'').toLowerCase();
     if(/quarter/.test(f))return 'quarterly';
@@ -162,11 +164,17 @@
     if(k==='biannual')return m<=6?m:m-6;
     return m;
   }
-  // Months with a service visit (filter change): quarterly = every 3 months, bi-annual = every 6, otherwise once a year
-  function serviceMonths(renewal,freq){
+  // Months with a service visit (filter change): quarterly = every 3 months, bi-annual = every 6, otherwise once a year.
+  // 6x properties get filter visits at renewal +0, 2, 3, 4, 6, 8, 9 and 10 months (8 visits a year).
+  function serviceMonths(renewal,freq,six){
     if(!renewal)return [];
-    var k=freqKind(freq), step=(k==='quarterly')?3:(k==='biannual')?6:12, out=[];
-    for(var x=0;x<12;x+=step){out.push(((renewal-1+x)%12)+1);}
+    var out=[], x;
+    if(six){
+      [0,2,3,4,6,8,9,10].forEach(function(o){out.push(((renewal-1+o)%12)+1);});
+    }else{
+      var k=freqKind(freq), step=(k==='quarterly')?3:(k==='biannual')?6:12;
+      for(x=0;x<12;x+=step){out.push(((renewal-1+x)%12)+1);}
+    }
     return out.sort(function(a,b){return a-b});
   }
   function nextService(list,mon){
@@ -191,6 +199,7 @@
     m.pName=m.pName||pick(ph,[/^propertyname$/i,/property.?name/i,/^name$/i]);
     m.pRen=m.pRen||pick(ph,[/^renewalmonth$/i,/renewal/i]);
     m.pFreq=m.pFreq||pick(ph,[/^billingfrequency$/i,/billing.?freq/i,/freq/i]);
+    if(m.p6x==null)m.p6x=pick(ph,[/^has6x/i,/6x/i]);
     m.tId=m.tId||pick(th,[/^propertyid$/i,/property.?id/i]);
     m.tType=m.tType||pick(th,[/^parttype$/i,/type/i]);
     if(!m.cols){
@@ -204,6 +213,7 @@
     fillSelect($('mPName'),S.props.headers,m.pName);
     fillSelect($('mPRen'),S.props.headers,m.pRen);
     fillSelect($('mPFreq'),S.props.headers,m.pFreq);
+    fillSelect($('mP6x'),S.props.headers,m.p6x);
     fillSelect($('mTId'),S.parts.headers,m.tId);
     fillSelect($('mType'),S.parts.headers,m.tType);
     $('mBelt').value=m.belt;
@@ -214,7 +224,7 @@
   }
   function readMapping(){
     var m=S.map;
-    m.pId=$('mPId').value; m.pName=$('mPName').value; m.pRen=$('mPRen').value; m.pFreq=$('mPFreq').value;
+    m.pId=$('mPId').value; m.pName=$('mPName').value; m.pRen=$('mPRen').value; m.pFreq=$('mPFreq').value; m.p6x=$('mP6x').value;
     m.tId=$('mTId').value; m.tType=$('mType').value; m.belt=$('mBelt').value;
     var cols=[];
     $('mCols').querySelectorAll('input').forEach(function(cb){ if(cb.checked)cols.push(S.parts.headers[+cb.getAttribute('data-c')]); });
@@ -226,7 +236,7 @@
     var m=S.map, out=[];
     (S.props?S.props.rows:[]).forEach(function(r){
       var name=(r[m.pName]||'').trim(); if(!name)return;
-      out.push({id:String(r[m.pId]||'').trim(),name:name,renewal:parseMonth(r[m.pRen]),renewalRaw:r[m.pRen],freq:r[m.pFreq]||''});
+      out.push({id:String(r[m.pId]||'').trim(),name:name,renewal:parseMonth(r[m.pRen]),renewalRaw:r[m.pRen],freq:r[m.pFreq]||'',six:isTrue(r[m.p6x])});
     });
     out.sort(function(a,b){return a.name.localeCompare(b.name,undefined,{sensitivity:'base'})});
     return out;
@@ -260,7 +270,7 @@
     if(!p){out.innerHTML='';return;}
     var m=S.map, mon=parseInt($('mon').value,10);
     var bm=beltMonth(p.renewal,p.freq);
-    var sm=serviceMonths(p.renewal,p.freq);
+    var sm=serviceMonths(p.renewal,p.freq,p.six);
     var serviceNow=sm.indexOf(mon)>-1;
     var dueNow=bm>0&&bm===mon;
     var any=$('anyway').checked;
@@ -281,7 +291,7 @@
     }
     var h='';
     h+='<div class="chips"><span class="chip">Renewal: '+(p.renewal?MONTHS[p.renewal-1]:esc(p.renewalRaw||'unknown'))+'</span>'+
-       '<span class="chip">Billing: '+esc(p.freq||'unknown')+'</span>'+
+       '<span class="chip">Billing: '+esc(p.freq||'unknown')+(p.six?' &middot; 6x filters':'')+'</span>'+
        '<span class="chip">Service months: '+(sm.length?sm.map(function(x){return MONTHS[x-1].slice(0,3)}).join(', '):'unknown')+'</span>'+
        '<span class="chip">Belt month: '+(bm?MONTHS[bm-1]:'unknown')+'</span></div>';
     if(!p.renewal) h+='<div class="banner no">Renewal month could not be read for this property, so the schedule is unknown.</div>';
